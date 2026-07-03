@@ -1,0 +1,99 @@
+"use client";
+import * as React from "react";
+import {
+  Area, AreaChart, Bar, BarChart, Line, LineChart,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
+
+/**
+ * MEDA fintech charts (Recharts) — Binance-style. For balance/movements over time, volume, KPIs.
+ * Opt-in: needs `recharts`. Activate: pnpm add -E recharts + rename this file to meda-charts.tsx.
+ * Colors come from CSS vars so they follow the theme (price-up green / price-down red).
+ */
+
+// Read a CSS token at runtime (so charts match dark/light + Binance colors).
+function useToken(name: string, fallback: string) {
+  const [v, setV] = React.useState(fallback);
+  React.useEffect(() => {
+    const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (val) setV(val);
+  }, [name]);
+  return v;
+}
+
+interface Point { label: string; value: number; }
+interface ChartProps { data: Point[]; height?: number; className?: string; trend?: "up" | "down" | "brand"; }
+
+const tooltipStyle = {
+  background: "var(--color-surface-raised)",
+  border: "1px solid var(--color-border-default)",
+  borderRadius: 8,
+  fontSize: 12,
+  color: "var(--color-fg)",
+};
+
+/** Area chart — best for balance / movements over time (the classic fintech hero chart). */
+export function AreaTrendChart({ data, height = 240, className, trend = "brand" }: ChartProps) {
+  const up = useToken("--color-price-up", "#0ECB81");
+  const down = useToken("--color-price-down", "#F6465D");
+  const brand = useToken("--color-brand", "#FCD535");
+  const color = trend === "up" ? up : trend === "down" ? down : brand;
+  return (
+    <div className={className}>
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={`grad-${trend}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+          <Tooltip contentStyle={tooltipStyle} />
+          <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={`url(#grad-${trend})`} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Bar chart — best for volume per period (e.g. transactions per day, revenue per month). */
+export function BarVolumeChart({ data, height = 240, className }: ChartProps) {
+  const brand = useToken("--color-brand", "#FCD535");
+  return (
+    <div className={className}>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--color-muted)" }} />
+          <Bar dataKey="value" fill={brand} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Line chart — best for comparing a metric over time (e.g. price, conversion rate). */
+export function LineMetricChart({ data, height = 240, className, trend = "brand" }: ChartProps) {
+  const up = useToken("--color-price-up", "#0ECB81");
+  const down = useToken("--color-price-down", "#F6465D");
+  const brand = useToken("--color-brand", "#FCD535");
+  const color = trend === "up" ? up : trend === "down" ? down : brand;
+  return (
+    <div className={className}>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: "var(--color-fg-tertiary)", fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+          <Tooltip contentStyle={tooltipStyle} />
+          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}

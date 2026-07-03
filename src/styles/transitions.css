@@ -1,0 +1,47 @@
+/* MEDA UI — page & element transitions */
+@keyframes meda-fade-slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.meda-page-enter {
+  animation: meda-fade-slide 0.28s ease-out;
+}
+
+@keyframes meda-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.meda-fade-in { animation: meda-fade-in 0.2s ease-out; }
+
+/* Respect reduced-motion accessibility preference */
+@media (prefers-reduced-motion: reduce) {
+  .meda-page-enter, .meda-fade-in { animation: none; }
+}
+
+/* Dropdown / menu entrance (columns menu, selects) */
+@keyframes meda-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.meda-pop { animation: meda-pop 0.16s ease-out; transform-origin: top right; }
+
+@media (prefers-reduced-motion: reduce) {
+  .meda-pop { animation: none; }
+}
+
+/* Dialog / modal entrance (centered pop) */
+@keyframes meda-dialog-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.meda-dialog-in { animation: meda-dialog-in 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .meda-dialog-in { animation: none; }
+}
+
+/* Sheet / drawer slide */
+@keyframes meda-slide-left { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes meda-slide-right { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.meda-slide-left { animation: meda-slide-left 0.2s ease-out; }
+.meda-slide-right { animation: meda-slide-right 0.2s ease-out; }
+@media (prefers-reduced-motion: reduce) { .meda-slide-left, .meda-slide-right { animation: none; } }

@@ -1,106 +1,98 @@
-# Medá · Plataforma Web Persona Física
+# Medá · Natural Person Web Platform
 
-Plataforma web de banca digital para **personas físicas** de Medá: inicio de sesión con verificación
-en dos pasos, movimientos y saldo, transferencias SPEI, estados de cuenta descargables en PDF, gestión
-de perfil y un flujo regulatorio de **beneficiarios y sucesión** (herencia de la cuenta).
+Digital banking web platform for **natural persons (personas físicas)** at Medá: two-factor login,
+balance and movements, SPEI transfers, downloadable PDF account statements, profile management, and a
+regulatory **beneficiary and succession** flow (account inheritance on the holder's death).
 
-Construida siguiendo los estándares de frontend de Medá (Next.js 16 App Router + TypeScript +
-Tailwind), con **MSW** simulando el backend mientras los endpoints reales no existen.
+Built following Medá's frontend standards (Next.js 16 App Router + TypeScript + Tailwind), with
+**MSW** simulating the backend while the real endpoints don't exist yet.
 
-> Este documento explica qué hace la plataforma, cómo está construida, las decisiones de arquitectura
-> y seguridad, y cómo correrla y probarla de punta a punta.
-
----
-
-## Tabla de contenido
-
-1. [Stack técnico](#1-stack-técnico)
-2. [Cómo empezar](#2-cómo-empezar)
-3. [Scripts disponibles](#3-scripts-disponibles)
-4. [Variables de entorno](#4-variables-de-entorno)
-5. [Arquitectura del proyecto](#5-arquitectura-del-proyecto)
-6. [Mocking con MSW: cómo y por qué](#6-mocking-con-msw-cómo-y-por-qué)
-7. [Contrato de API (envelope MEDA)](#7-contrato-de-api-envelope-meda)
-8. [Estado y datos](#8-estado-y-datos)
-9. [Seguridad y buenas prácticas aplicadas](#9-seguridad-y-buenas-prácticas-aplicadas)
-10. [Casos de uso](#10-casos-de-uso)
-11. [Diagramas de secuencia](#11-diagramas-de-secuencia)
-12. [Credenciales y códigos de prueba](#12-credenciales-y-códigos-de-prueba)
-13. [Despliegue](#13-despliegue)
-14. [Cuando llegue el backend real](#14-cuando-llegue-el-backend-real)
+> This document explains what the platform does, how it's built, the architecture and security
+> decisions behind it, and how to run and test it end to end.
 
 ---
 
-## 1. Stack técnico
+## Table of contents
 
-| Capa | Elección | Por qué |
+1. [Tech stack](#1-tech-stack)
+2. [Getting started](#2-getting-started)
+3. [Available scripts](#3-available-scripts)
+4. [Environment variables](#4-environment-variables)
+5. [Project architecture](#5-project-architecture)
+6. [Mocking with MSW: how and why](#6-mocking-with-msw-how-and-why)
+7. [API contract (Medá envelope)](#7-api-contract-medá-envelope)
+8. [State and data](#8-state-and-data)
+9. [Security and best practices applied](#9-security-and-best-practices-applied)
+10. [Use cases](#10-use-cases)
+11. [Sequence diagrams](#11-sequence-diagrams)
+12. [Test credentials](#12-test-credentials)
+13. [Sharing a review link (tunnel)](#13-sharing-a-review-link-tunnel)
+14. [When the real backend arrives](#14-when-the-real-backend-arrives)
+
+---
+
+## 1. Tech stack
+
+| Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 16** (App Router, Turbopack) | Estándar Medá; Server/Client Components, rutas por carpetas |
-| Lenguaje | **TypeScript** | Tipado en API, formularios y contratos de datos |
-| Estilos | **Tailwind CSS 4** + tokens MEDA UI (`meda-tokens.css`) | Sistema de diseño Binance-style, dark mode nativo |
-| Formularios | **React Hook Form + Zod** | Validación declarativa y tipada, integrada con `@hookform/resolvers` |
-| Estado de sesión | **Zustand** (con `persist` en `sessionStorage`) | Estado global pequeño; ver [sección 8](#8-estado-y-datos) |
-| Datos remotos | **TanStack Query** | Cache, invalidación, estados de carga/error uniformes |
-| Mocking | **MSW (Mock Service Worker)** | Intercepta a nivel de red; ver [sección 6](#6-mocking-con-msw-cómo-y-por-qué) |
-| Iconos | **lucide-react** | Set de íconos consistente con el resto de apps Medá |
-| Gestor de paquetes | **pnpm** (`pnpm@11.8.0` fijo en `packageManager`) | Reproducibilidad; versiones exactas, sin `^`/`~` |
+| Framework | **Next.js 16** (App Router, Turbopack) | Medá standard; Server/Client Components, folder-based routing |
+| Language | **TypeScript** (`strict: true`) | End-to-end typing across API, forms, and store — no `any` in product code |
+| Styling | **Tailwind CSS 4** + MEDA UI tokens (`meda-tokens.css`) | Binance-style design system, native dark mode |
+| Forms | **React Hook Form + Zod** | Declarative, typed validation via `@hookform/resolvers` |
+| Session state | **Zustand** (`persist` in `sessionStorage`) | Small global state; see [section 8](#8-state-and-data) |
+| Remote data | **TanStack Query** | Cache, invalidation, consistent loading/error states |
+| Mocking | **MSW (Mock Service Worker)** | Intercepts at the network layer; see [section 6](#6-mocking-with-msw-how-and-why) |
+| Icons | **lucide-react** | Icon set consistent with the rest of Medá's apps |
+| Package manager | **pnpm**, pinned via `packageManager: "pnpm@11.8.0"` | Reproducibility; exact dependency versions, no `^`/`~` |
 
-## 2. Cómo empezar
+## 2. Getting started
 
 ```bash
 pnpm install
 
-# Desarrollo (MSW activo por defecto en dev)
+# Development (MSW is on by default in dev)
 pnpm dev
 # → http://localhost:3000
 ```
 
-Al abrir la app en desarrollo, MSW arranca automáticamente (no requiere configuración) y toda la
-plataforma funciona con datos simulados: no necesitas backend, base de datos ni variables de entorno
-para probarla localmente.
+When the app opens in development, MSW starts automatically (zero configuration) and the whole
+platform runs against simulated data: no backend, database, or environment variables are needed to
+try it locally.
 
-## 3. Scripts disponibles
+## 3. Available scripts
 
-| Script | Qué hace |
+| Script | What it does |
 |---|---|
-| `pnpm dev` | Servidor de desarrollo (Turbopack), con recarga en caliente |
-| `pnpm build` | Build de producción (modo servidor) |
-| `pnpm start` | Sirve el build de producción (requiere `pnpm build` antes) |
-| `pnpm lint` | ESLint sobre todo el proyecto |
-| `pnpm dev:tunnel` | Expone `localhost:3000` con `cloudflared` (para compartir una URL de revisión) |
+| `pnpm dev` | Development server (Turbopack), with hot reload |
+| `pnpm build` | Production build (server mode) |
+| `pnpm start` | Serves the production build (run `pnpm build` first) |
+| `pnpm lint` | ESLint across the whole project |
+| `pnpm dev:tunnel` | Exposes `localhost:3000` via `cloudflared` — see [section 13](#13-sharing-a-review-link-tunnel) |
 
-Build para **export estático** (por ejemplo, Netlify Drop o cualquier hosting estático), ver
-[sección 13](#13-despliegue):
+## 4. Environment variables
 
-```bash
-STATIC_EXPORT=true NEXT_PUBLIC_ENABLE_MSW=true pnpm build
-# genera ./out
-```
+No `.env` file is required to develop: the defaults already enable MSW in dev and point to an empty
+API base (every request is intercepted by the mock). Documented for when they're needed:
 
-## 4. Variables de entorno
-
-No se requiere ningún `.env` para desarrollar: los defaults ya activan MSW en dev y apuntan a una base
-de API vacía (todas las peticiones las intercepta el mock). Documentadas para cuando se necesiten:
-
-| Variable | Default efectivo | Uso |
+| Variable | Effective default | Use |
 |---|---|---|
-| `NEXT_PUBLIC_API_URI_BASE` | `""` (vacío) | Prefijo de las rutas de API reales (`lib/api/client.ts`). En vacío, las rutas son relativas y MSW las intercepta igual. |
-| `NEXT_PUBLIC_ENABLE_MSW` | `true` en dev, `false` en producción | Fuerza encender/apagar MSW. `"true"` explícito lo activa incluso en un build de producción (usado para el export estático de revisión/demo). `"false"` explícito lo apaga en dev. |
+| `NEXT_PUBLIC_API_URI_BASE` | `""` (empty) | Prefix for real API routes (`lib/api/client.ts`). Left empty, routes are relative and MSW still intercepts them. |
+| `NEXT_PUBLIC_ENABLE_MSW` | `true` in dev, `false` in production | Forces MSW on/off. An explicit `"true"` enables it even in a production build (used for review/demo builds without a backend). An explicit `"false"` disables it in dev. |
 
-**Ninguna variable contiene secretos.** Ver [sección 9](#9-seguridad-y-buenas-prácticas-aplicadas).
+**No variable holds a secret.** See [section 9](#9-security-and-best-practices-applied).
 
-## 5. Arquitectura del proyecto
+## 5. Project architecture
 
 ```
 src/
-├── app/                          # Next.js App Router — solo rutas y layouts
-│   ├── login/                    # /login (pública)
-│   ├── verificar/                # /verificar — OTP tras login
-│   ├── activar/                  # /activar — onboarding del beneficiario
-│   ├── sucesion/                 # /sucesion — activar protocolo de sucesión (por URL)
-│   ├── restablecer/              # /restablecer — reinicia el estado mock (solo dev/demo)
-│   └── (app)/                    # Grupo de rutas AUTENTICADAS (con sidebar + topbar)
-│       ├── layout.tsx            #   guard de sesión + AppShell + SessionTimeout
+├── app/                          # Next.js App Router — routing and layouts only
+│   ├── login/                    # /login (public)
+│   ├── verificar/                # /verificar — OTP step after login
+│   ├── activar/                  # /activar — beneficiary onboarding
+│   ├── sucesion/                 # /sucesion — activates the succession protocol (external URL)
+│   ├── restablecer/              # /restablecer — resets the mock state (dev/demo only)
+│   └── (app)/                    # AUTHENTICATED route group (sidebar + topbar)
+│       ├── layout.tsx            #   session guard + AppShell + SessionTimeout
 │       ├── movimientos/
 │       ├── estados-de-cuenta/[id]/
 │       ├── transacciones/{enviar-spei,recibir-spei,entre-cuentas}/
@@ -109,440 +101,481 @@ src/
 │       ├── cancelar/
 │       └── notificaciones/
 │
-├── features/                     # Lógica y UI por dominio (un feature = una carpeta)
-│   ├── auth/                     #   login, OTP, onboarding beneficiario, sucesión
-│   ├── movements/                #   tabla de movimientos, detalle, CEP
-│   ├── transactions/              #   enviar SPEI, entre cuentas, modal de NIP
-│   ├── account-statements/       #   listado + documento imprimible (PDF)
-│   ├── profile/                  #   ver/editar datos, cambiar NIP
-│   ├── beneficiary/               #   alta/edición/baja de beneficiarios
-│   ├── account/                  #   cancelación de cuenta
-│   ├── security/                 #   NipDialog reutilizable (autorización)
-│   └── shell/                    #   menú de usuario, notificaciones, inactividad
+├── features/                     # Domain logic and UI (one feature = one folder)
+│   ├── auth/                     #   login, OTP, beneficiary onboarding, succession
+│   ├── movements/                #   movements table, detail, CEP receipt
+│   ├── transactions/              #   send SPEI, between-accounts transfer, NIP modal
+│   ├── account-statements/       #   listing + printable document (PDF)
+│   ├── profile/                  #   view/edit data, change NIP
+│   ├── beneficiary/               #   beneficiary create/edit/revoke
+│   ├── account/                  #   account cancellation
+│   ├── security/                 #   reusable NipDialog (authorization)
+│   └── shell/                    #   user menu, notifications, inactivity monitor
 │
 ├── components/
-│   ├── ui/                       # Librería MEDA UI (Button, DataTable, DetailModal, Sidebar, …)
+│   ├── ui/                       # MEDA UI library (Button, DataTable, DetailModal, Sidebar, …)
 │   ├── providers/                # MSWProvider, QueryProvider, AppProviders
 │   └── icons/
 │
 ├── lib/
-│   ├── api/                      # Clientes tipados por dominio (auth.ts, account.ts, profile.ts, client.ts)
-│   ├── hooks/                    # Hooks de TanStack Query (use-account.ts, use-profile.ts)
+│   ├── api/                      # Typed clients per domain (auth.ts, account.ts, profile.ts, client.ts)
+│   ├── hooks/                    # TanStack Query hooks (use-account.ts, use-profile.ts)
 │   ├── stores/                   # Zustand (auth-store.ts)
 │   └── utils/                    # format, validators, mask, cn
 │
-├── mocks/                        # MSW — el "backend" simulado
-│   ├── handlers/                 #   auth.ts, account.ts, profile.ts (uno por dominio)
-│   ├── data.ts                   #   datos semilla + generadores
-│   ├── store.ts                  #   estado mutable persistente (localStorage)
-│   └── browser.ts / enabled.ts   #   arranque del worker + flag de activación
+├── mocks/                        # MSW — the simulated backend
+│   ├── handlers/                 #   auth.ts, account.ts, profile.ts (one per domain)
+│   ├── data.ts                   #   seed data + generators
+│   ├── store.ts                  #   persistent mutable state (localStorage)
+│   └── browser.ts / enabled.ts   #   worker bootstrap + activation flag
 │
 └── styles/                       # meda-tokens.css (design tokens), transitions.css
 ```
 
-**Regla de oro de la estructura:** `app/` solo enruta (páginas delgadas que renderizan un componente de
-`features/`); toda la lógica de negocio, estado local y UI compuesta vive en `features/`. Esto permite
-reutilizar la misma vista desde distintas rutas y facilita las pruebas.
+**Golden rule:** `app/` only routes (thin pages that render a `features/` component); all business
+logic, local state, and composed UI lives in `features/`. This lets the same view be reused from
+different routes and keeps it testable in isolation.
 
-## 6. Mocking con MSW: cómo y por qué
+## 6. Mocking with MSW: how and why
 
-El backend de persona física **no existe todavía**. En vez de hardcodear respuestas dentro de los
-componentes (`if (fake) return {...}`), usamos **MSW (Mock Service Worker)**, que intercepta las
-peticiones **a nivel de red** — el código de la app llama a la ruta real (`/auth/login`,
-`/account/movements`, …) sin saber que existe un mock:
+The natural-person backend **doesn't exist yet**. Instead of hardcoding responses inside components
+(`if (fake) return {...}`), the app uses **MSW (Mock Service Worker)**, which intercepts requests **at
+the network layer** — application code calls the real route (`/auth/login`, `/account/movements`, …)
+with no awareness that a mock exists:
 
 ```
-Componente → hook (TanStack Query) → lib/api/*.ts (fetch a ruta real)
+Component → hook (TanStack Query) → lib/api/*.ts (fetch to the real route)
                                             │
-                                    (en dev/demo) MSW intercepta aquí, en el navegador
+                                 (dev/demo only) MSW intercepts here, in the browser
                                             │
-                                    responde con el mismo contrato que dará el backend real
+                                 responds with the same contract the real backend will return
 ```
 
-**Por qué importa:** el día que el backend esté listo, se apaga MSW con una variable de entorno
-(`NEXT_PUBLIC_ENABLE_MSW=false`) y **no se toca ni una línea de `lib/api` ni de los componentes** —
-nunca hubo código de mock mezclado con código de producción que haya que encontrar y borrar.
+**Why it matters:** once the backend is ready, MSW is turned off with one environment variable
+(`NEXT_PUBLIC_ENABLE_MSW=false`) and **not a single line of `lib/api` or any component changes** —
+mock code never lived mixed into production code that would need to be found and deleted.
 
-**Dónde vive cada cosa:**
-- `src/mocks/handlers/*.ts` — un archivo por dominio (`auth`, `account`, `profile`), cada uno con sus
-  `http.get/post/patch/delete`, devolviendo el [envelope real](#7-contrato-de-api-envelope-meda).
-- `src/mocks/data.ts` — datos semilla (167 movimientos generados, catálogo de bancos, perfil por
-  defecto) y funciones que generan movimientos nuevos (p. ej. al enviar un SPEI).
-- `src/mocks/store.ts` — el único lugar con **estado mutable**: persiste en `localStorage`
-  (`meda-pf-mock-state`) para que decisiones como "activar sucesión" o "dar de alta un beneficiario"
-  **sobrevivan a un refresh** y se comporten como cambios reales, no como una animación de UI.
-- `src/components/providers/msw-provider.tsx` — arranca el *service worker* del navegador antes de
-  renderizar la app (evita que una petición salga antes de que el mock esté listo) y no bloquea la UI
-  si el worker falla en arrancar.
+**Where each piece lives:**
+- `src/mocks/handlers/*.ts` — one file per domain (`auth`, `account`, `profile`), each with its
+  `http.get/post/patch/delete` handlers, returning the real [envelope](#7-api-contract-medá-envelope).
+- `src/mocks/data.ts` — seed data (167 generated movements, bank catalog, default profile) and
+  generator functions for new movements (e.g. when a SPEI transfer is sent).
+- `src/mocks/store.ts` — the only place holding **mutable state**: persisted to `localStorage`
+  (`meda-pf-mock-state`) so decisions like "activate succession" or "register a beneficiary"
+  **survive a page refresh** and behave like real changes, not a UI-only animation.
+- `src/components/providers/msw-provider.tsx` — starts the browser's service worker before the app
+  renders (prevents a request from firing before the mock is ready) and never leaves the UI stuck if
+  the worker fails to start.
 
-**Endpoints simulados actualmente:**
+**Currently simulated endpoints:**
 
-| Dominio | Método y ruta | Qué hace |
+| Domain | Method & route | What it does |
 |---|---|---|
-| Auth | `POST /auth/login` | Valida credenciales (titular o beneficiario), dispara OTP |
-| Auth | `POST /auth/otp/request` | Reenvía el código |
-| Auth | `POST /auth/otp/validate` | Confirma el OTP → entrega tokens de sesión |
-| Auth | `POST /auth/nip/validate` | Autoriza una acción sensible con el código actual |
-| Auth | `POST /auth/nip/change` | Cambia el NIP (valida el actual) |
-| Auth | `POST /auth/beneficiary/start` | Onboarding: valida elegibilidad del beneficiario, envía OTP |
-| Auth | `POST /auth/beneficiary/activate` | Onboarding: define contraseña + NIP → sesión |
-| Auth | `POST /auth/logout` | Cierra sesión |
-| Cuenta | `GET /account/balance` | Saldo y datos de la cuenta |
-| Cuenta | `GET /account/movements` | Movimientos con filtros (clave de rastreo, rango de fechas) |
-| Cuenta | `GET /account/movements/:id` | Detalle de un movimiento |
-| Cuenta | `GET /account/movements/:id/cep` | Comprobante Electrónico de Pago |
-| Cuenta | `GET /account/statements` | Periodos de estado de cuenta disponibles |
-| Cuenta | `POST /transactions/spei` | Envía un SPEI (requiere NIP), genera un movimiento nuevo |
-| Perfil | `GET /account/profile` | Perfil + estado de cuenta + lista de beneficiarios |
-| Perfil | `PATCH /account/profile` | Actualiza correo/teléfono/RFC |
-| Beneficiario | `GET / POST /account/beneficiary` | Lista / alta de beneficiarios |
-| Beneficiario | `PATCH /account/beneficiary/:id` | Edición |
-| Beneficiario | `DELETE /account/beneficiary/:id` | Baja |
-| Sucesión | `POST /account/succession/request` | Activa el protocolo por correo del titular (flujo externo) |
-| Cuenta | `POST /account/cancel` | Cancela la cuenta (requiere NIP + CLABE destino) |
-| Demo | `POST /demo/reset` | Reinicia el estado mock a sus valores iniciales |
+| Auth | `POST /auth/login` | Validates credentials (holder or beneficiary), triggers OTP |
+| Auth | `POST /auth/otp/request` | Resends the code |
+| Auth | `POST /auth/otp/validate` | Confirms the OTP → issues session tokens |
+| Auth | `POST /auth/nip/validate` | Authorizes a sensitive action with the current 6-digit code |
+| Auth | `POST /auth/nip/change` | Changes the NIP (validates the current one) |
+| Auth | `POST /auth/beneficiary/start` | Onboarding: validates beneficiary eligibility, sends OTP |
+| Auth | `POST /auth/beneficiary/activate` | Onboarding: sets password + NIP → session |
+| Auth | `POST /auth/logout` | Signs out |
+| Account | `GET /account/balance` | Balance and account data |
+| Account | `GET /account/movements` | Movements with filters (tracking key, date range) |
+| Account | `GET /account/movements/:id` | Movement detail |
+| Account | `GET /account/movements/:id/cep` | Electronic Payment Receipt (CEP) |
+| Account | `GET /account/statements` | Available account-statement periods |
+| Account | `POST /transactions/spei` | Sends a SPEI transfer (requires NIP), creates a new movement |
+| Profile | `GET /account/profile` | Profile + account status + beneficiary list |
+| Profile | `PATCH /account/profile` | Updates email/phone/RFC |
+| Beneficiary | `GET / POST /account/beneficiary` | List / create beneficiaries |
+| Beneficiary | `PATCH /account/beneficiary/:id` | Edit |
+| Beneficiary | `DELETE /account/beneficiary/:id` | Revoke |
+| Succession | `POST /account/succession/request` | Activates the protocol via the holder's email (external flow) |
+| Account | `POST /account/cancel` | Cancels the account (requires NIP + destination CLABE) |
+| Demo | `POST /demo/reset` | Resets the mock state to its initial values |
 
-## 7. Contrato de API (envelope MEDA)
+## 7. API contract (Medá envelope)
 
-Todas las llamadas usan el mismo sobre (`lib/api/client.ts`), igual que los servicios Java de Medá:
+Every call uses the same envelope (`lib/api/client.ts`), matching Medá's Java services:
 
 ```ts
-// Petición (POST/PATCH/DELETE)
-{ "traceId": "uuid-generado", "body": { /* payload */ } }
+// Request (POST/PATCH/DELETE)
+{ "traceId": "generated-uuid", "body": { /* payload */ } }
 
-// Respuesta
+// Response
 { "status": "OK" | "ERROR", "errorCode": string | null, "errorMessage": string | null, "data": T }
 ```
 
-`get/post/patch/del` en `lib/api/client.ts` desenvuelven la respuesta automáticamente: si
-`status === "ERROR"` lanzan `MedaApiError(errorCode, errorMessage)`, que los componentes capturan para
-mostrar el mensaje al usuario. Nunca se inspecciona `response.ok` de HTTP para decidir éxito/error —
-MEDA usa **HTTP 200 con `status: "ERROR"`** para errores de negocio (credenciales inválidas, NIP
-incorrecto, etc.), y reserva `>=500` para errores de infraestructura.
+`get/post/patch/del` in `lib/api/client.ts` unwrap the response automatically: when
+`status === "ERROR"` they throw `MedaApiError(errorCode, errorMessage)`, which components catch to
+show the message to the user. **HTTP status is never used to decide success/failure** — Medá returns
+**HTTP 200 with `status: "ERROR"`** for business errors (invalid credentials, wrong NIP, etc.), and
+reserves `>= 500` for infrastructure failures.
 
-## 8. Estado y datos
+## 8. State and data
 
-- **Sesión de usuario** → Zustand (`lib/stores/auth-store.ts`), persistido en `sessionStorage` (se
-  limpia al cerrar la pestaña/navegador, no en `localStorage`, para no dejar sesión "colgada"
-  indefinidamente en un dispositivo compartido). Guarda `preAuth` (credenciales validadas, esperando
-  OTP) y `user` (sesión completa), diferenciando rol `HOLDER` (titular) vs `BENEFICIARY`.
-- **Datos remotos** (saldo, movimientos, perfil, estados de cuenta) → TanStack Query. Cada mutación
-  relevante (enviar SPEI, cambiar perfil, dar de alta un beneficiario) invalida las queries afectadas
-  (`["balance"]`, `["movements"]`, `["profile"]`) para que la UI se refresque sola, sin manejar estado
-  duplicado a mano.
-- **No hay Redux**: el alcance de estado global de esta app (sesión + cache de red) no lo justifica;
-  Zustand + TanStack Query cubren el 100% de los casos. Ver estándar `fe-state-management`.
+- **User session** → Zustand (`lib/stores/auth-store.ts`), persisted to `sessionStorage` (cleared when
+  the tab/browser closes, not `localStorage`, so a session never lingers indefinitely on a shared
+  device). Holds `preAuth` (credentials validated, awaiting OTP) and `user` (full session),
+  distinguishing role `HOLDER` vs `BENEFICIARY`.
+- **Remote data** (balance, movements, profile, statements) → TanStack Query. Every relevant mutation
+  (sending a SPEI, updating the profile, registering a beneficiary) invalidates the affected queries
+  (`["balance"]`, `["movements"]`, `["profile"]`) so the UI refreshes itself, with no hand-rolled
+  duplicate state.
+- **No Redux**: this app's global-state surface (session + network cache) doesn't justify it; Zustand
+  + TanStack Query cover 100% of the cases. See the `fe-state-management` standard.
 
-## 9. Seguridad y buenas prácticas aplicadas
+## 9. Security and best practices applied
 
-Checklist real, verificado en este repo (no aspiracional):
+A verified checklist against this repository's actual code — not aspirational.
 
-- ✅ **Sin secretos en el cliente.** Las únicas variables `NEXT_PUBLIC_*` son configuración pública
-  (URL base de API, flag de mocking) — nunca tokens ni llaves.
-- ✅ **Sin `console.*` en código de producto** (solo en páginas de referencia `/showcase`,
-  `/components`, que documentan la librería UI y no forman parte del flujo de negocio).
-- ✅ **Sin `any` / `as any`** en el código de la aplicación — todo tipado de punta a punta (API,
-  formularios, store).
-- ✅ **`dangerouslySetInnerHTML`** usado una sola vez, para inyectar un script estático (detección de
-  tema oscuro/claro antes del primer render) — sin datos de usuario ni de terceros.
-- ✅ **Validación de input con Zod** en todos los formularios (login, SPEI, beneficiario, perfil), más
-  validadores de dominio mexicano (`isValidCLABE`, `isValidRFC`, `isValidCURP`, `isValidEmail`,
-  `isValidPhoneMX`) reutilizables en `lib/utils/validators.ts`.
-- ✅ **Autorización explícita en acciones sensibles**: enviar SPEI, cambiar correo/teléfono/NIP, ver o
-  descargar un estado de cuenta, dar de alta/editar/dar de baja un beneficiario y cancelar la cuenta
-  requieren **confirmar con un código de 6 dígitos** (`NipDialog` / `NipModal`) antes de ejecutarse.
-  Ninguna de estas acciones se dispara solo con un clic.
-- ✅ **Versiones de dependencias exactas** (sin `^`/`~`) y lockfile (`pnpm-lock.yaml`) comprometido —
-  una actualización de una dependencia nunca ocurre "sola" en un `pnpm install`.
-- ✅ **`packageManager` fijado** (`pnpm@11.8.0`) para reproducibilidad entre máquinas/CI.
-- ✅ **MSW nunca corre en producción** salvo activación explícita (usada únicamente para builds de
-  demo/revisión sin backend), y su código vive fuera de `lib/api` y de los componentes — ver
-  [sección 6](#6-mocking-con-msw-cómo-y-por-qué).
-- ✅ **Sesión en `sessionStorage`**, no en `localStorage` (se pierde al cerrar el navegador).
-- ✅ **Cierre de sesión por inactividad** (5 minutos) — ver [caso de uso 9](#caso-9--cierre-de-sesión-por-inactividad).
-- ✅ **Geolocalización obligatoria** para iniciar sesión (requisito regulatorio IFPE) — no se puede
-  entrar sin ubicación verificada. Ver [caso de uso 10](#caso-10--geolocalización-obligatoria-en-el-login).
-- ✅ **Accesibilidad básica**: estados de error anunciados junto a cada campo, foco visible, botones
-  con `aria-label` donde no hay texto visible (copiar, cerrar modal, menú).
+### Client-side security
+- **No secrets in client code.** The only `NEXT_PUBLIC_*` variables are public configuration (API base
+  URL, mocking flag) — never tokens or keys.
+- **No `console.*`** in product code — confirmed by repo-wide grep; the only matches live in the
+  `/showcase` and `/components` reference pages that document the internal UI library and are not part
+  of the business flow.
+- **No `any` / `as any`** anywhere in application code, enforced by `"strict": true` in
+  `tsconfig.json`. Every API response, form value, and store shape is typed end to end.
+- **`dangerouslySetInnerHTML`** used exactly once, in `src/app/layout.tsx`, to inject a **static string
+  literal** (dark/light theme detection before first paint) that contains no user input, no network
+  response, and no interpolated data — it cannot be an XSS vector.
+- **No `eval`, `Function()`, or dynamic script injection** anywhere in the codebase.
 
-## 10. Casos de uso
+### Input validation
+All forms are validated with **Zod** schemas before submission (login, SPEI transfer, beneficiary,
+profile). Domain-specific validators live in `lib/utils/validators.ts` and are reused everywhere the
+same data type appears, instead of being redefined per form:
 
-#### Caso 1 — Iniciar sesión con verificación en dos pasos
-El titular ingresa correo y contraseña. Si son válidas, se envía un **código de un solo uso por
-correo** (OTP); solo tras confirmarlo se otorga la sesión. Sin ubicación verificada, el botón de
-inicio de sesión permanece deshabilitado (ver caso 10).
+| Field | Rule | Regex |
+|---|---|---|
+| CLABE | exactly 18 digits | `/^\d{18}$/` |
+| RFC (person or entity) | format only, not SAT-validated | `/^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/i` |
+| CURP | 18 characters, format only | `/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/i` |
+| Mexican phone | exactly 10 digits | `/^\d{10}$/` |
+| Email | basic shape check | `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` |
+| OTP / authorization code | exactly 6 numeric digits | enforced by the `InputOTP` component (`length={6}`) |
 
-#### Caso 2 — Consultar movimientos con filtros
-El titular ve su saldo, el total de registros y una tabla de movimientos filtrable por **clave de
-rastreo** y **rango de fechas**. Cada fila permite **Ver detalle** (modal con ordenante/beneficiario,
-comisión, IVA) y desde ahí **Ver CEP** (comprobante con sello digital), todo sin salir de la página.
+Numeric-only fields (CLABE, phone, reference number) strip non-digit characters on every keystroke
+instead of only validating on submit, so the user can never type a letter into a CLABE field.
 
-#### Caso 3 — Enviar SPEI (a terceros o entre cuentas propias)
-Formulario con validación de CLABE (18 dígitos), banco, monto contra saldo disponible y concepto. Antes
-de ejecutar la transferencia se solicita el **código de 6 dígitos** de autorización. Al confirmar, el
-movimiento aparece de inmediato en la lista y el saldo se actualiza (invalidación de queries).
+### Sensitive-action authorization
+Every action below requires the user to enter the **6-digit authorization code** before it executes —
+none of them fire on a single click. The table maps each action to where it's enforced and the mock
+error code returned on failure:
 
-#### Caso 4 — Recibir SPEI
-Pantalla con los datos bancarios de la cuenta (CLABE, banco, titular) listos para copiar y compartir.
+| Action | UI component | Backend route | Error code on failure |
+|---|---|---|---|
+| Send a SPEI / between-accounts transfer | `features/transactions/nip-modal.tsx` | `POST /transactions/spei` | `TX_NIP_001` |
+| Change email | `features/profile/profile-view.tsx` (`ChangeEmailModal`) | `PATCH /account/profile` (via `NipDialog`) | `NIP_001` |
+| Change phone | `features/profile/profile-view.tsx` (`ChangePhoneModal`) | `PATCH /account/profile` (via `NipDialog`) | `NIP_001` |
+| Change the NIP itself | `features/profile/profile-view.tsx` (`ChangeNipModal`) | `POST /auth/nip/change` | `NIP_002` (wrong current NIP) |
+| View / download an account statement | `features/account-statements/statements-view.tsx` | `POST /auth/nip/validate` | `NIP_001` |
+| Register / edit / revoke a beneficiary | `features/beneficiary/beneficiary-view.tsx` (via `NipDialog`) | `POST` / `PATCH` / `DELETE /account/beneficiary` | `NIP_001` |
+| Cancel the account | `features/account/cancel-account-view.tsx` | `POST /account/cancel` | `NIP_001`, then `CANCEL_001` if the destination CLABE is invalid |
 
-#### Caso 5 — Estados de cuenta como PDF
-Lista de periodos disponibles. **Ver** y **Descargar** piden primero el código de 6 dígitos (dato
-sensible). El documento se renderiza como un estado de cuenta bancario real (encabezado, resumen de
-abonos/cargos, tabla completa de movimientos del periodo) y "Descargar" dispara el diálogo de impresión
-del navegador con destino "Guardar como PDF" — sin librerías de generación de PDF, aprovechando el motor
-de impresión nativo.
+The authorization dialog (`features/security/nip-dialog.tsx`) is a single reusable component so every
+flow enforces the same UX and the same failure handling — there's no place in the app that re-invents
+"ask for the code."
 
-#### Caso 6 — Perfil: ver y editar datos
-El titular ve su información (correo, teléfono, RFC, CURP, CLABE) y puede **cambiar correo, teléfono o
-NIP**, cada cambio autorizado con el código de 6 dígitos (o el NIP actual, en el caso de cambiar NIP).
+### Session handling
+- Session tokens live in `sessionStorage`, not `localStorage`, so they never survive closing the
+  browser tab. This is a **mock token today** (no real backend to authenticate against); when the real
+  backend ships, see the migration note in [section 14](#14-when-the-real-backend-arrives) — the plan
+  is to move to an httpOnly cookie issued by the server, per Medá's `fe-auth` standard, since a
+  client-readable token is an XSS exfiltration target.
+- **Automatic logout after 5 minutes of inactivity** (`features/shell/session-timeout.tsx`), a
+  regulatory requirement (IFPE). Tracks `mousedown`, `mousemove`, `keydown`, `scroll`, `touchstart`;
+  synchronizes across browser tabs via the `storage` event so activity in one tab resets the timer in
+  every other open tab, and re-checks elapsed time on `visibilitychange` so a backgrounded tab can't
+  silently outlast the timeout.
+- **Role-aware session guard**: the `(app)` layout redirects to `/login` whenever `isAuthenticated` is
+  false, and the beneficiary role (`BENEFICIARY`) is carried in the session so the UI can show the
+  "accessing via succession" banner without a second round-trip.
 
-#### Caso 7 — Beneficiarios múltiples y protocolo de sucesión
-Punto central del cumplimiento regulatorio: si el titular fallece, sus fondos deben pasar a quien
-designó, sin que la cuenta quede huérfana.
+### Regulatory gate: geolocation
+Login is blocked until location is verified (IFPE requirement — see
+[use case 10](#use-case-10--mandatory-geolocation-at-login)). The check uses the **Permissions API**
+first (`navigator.permissions.query({ name: "geolocation" })`) rather than trusting
+`getCurrentPosition` alone, specifically to avoid a false "blocked" state when the browser permission
+is granted but the OS-level location service is off (a common macOS scenario) — in that case the user
+is still let through, since the *permission* (the thing actually within the user's/regulator's
+control) is what's being verified.
 
-- El titular puede registrar **más de un beneficiario**, repartiendo un **porcentaje** que nunca puede
-  sumar más de 100% entre todos.
-- Alta, edición y baja de un beneficiario requieren el código de 6 dígitos.
-- El protocolo de sucesión se activa por una **URL externa** (`/sucesion`), no desde dentro de la
-  sesión del titular — modela que, en la vida real, quien reporta un fallecimiento no tiene las
-  credenciales del titular. Ingresando el correo del titular, el sistema valida que existan
-  beneficiarios activos y cierra la cuenta del titular.
-- Cada beneficiario activo pasa entonces por un **onboarding propio** (`/activar`): como nunca tuvo
-  contraseña, verifica su correo (OTP), crea su contraseña y su NIP, y a partir de ahí puede iniciar
-  sesión con sus propias credenciales y ver/operar la cuenta heredada.
-- El titular, una vez activada la sucesión, **ya no puede iniciar sesión** (mensaje explícito, no un
-  error genérico).
+### Dependency and build hygiene
+- **Exact dependency versions** (no `^`/`~`) in `package.json`, plus a committed `pnpm-lock.yaml` — a
+  transitive dependency never bumps silently on `pnpm install`.
+- **`packageManager` pinned** (`pnpm@11.8.0`) for reproducibility across machines and CI.
+- **MSW never runs in production** unless explicitly forced on (only used for backend-less
+  demo/review builds), and its code lives entirely outside `lib/api` and the components — see
+  [section 6](#6-mocking-with-msw-how-and-why). The activation check
+  (`src/mocks/enabled.ts`) hard-codes `NODE_ENV === "production"` as a fallback deny, so a missing or
+  misconfigured environment variable fails closed, not open.
 
-#### Caso 8 — Cancelar cuenta
-Desde el perfil, el titular puede solicitar la cancelación: indica a qué CLABE dispersar su saldo,
-confirma con el código de 6 dígitos, y la cuenta queda marcada como cancelada (login bloqueado a
-partir de ese momento).
+### Accessibility
+Form errors are rendered next to their field (not only as a toast), interactive elements without
+visible text carry `aria-label` (copy buttons, modal close, menus), focus rings are preserved (never
+suppressed with `outline: none`), and status is never conveyed by color alone (e.g. `StatusPill` pairs
+a colored dot with a text label).
 
-#### Caso 9 — Cierre de sesión por inactividad
-Por cumplimiento (IFPE), la sesión se cierra automáticamente tras **5 minutos sin actividad**
-(mouse, teclado, scroll, touch). Sincronizado entre pestañas del mismo navegador: la actividad en una
-pestaña resetea el temporizador de las demás, y al volver el foco a una pestaña se revisa si el tiempo
-ya se cumplió mientras estaba en segundo plano.
+## 10. Use cases
 
-#### Caso 10 — Geolocalización obligatoria en el login
-Requisito regulatorio: no se puede iniciar sesión sin verificar la ubicación. La UI distingue con
-claridad **bloqueada** (el usuario negó el permiso: se le explica cómo reactivarlo en el navegador) de
-**no disponible** (el permiso del sitio está concedido pero el sistema operativo no entrega
-coordenadas — común en macOS con los Servicios de Ubicación apagados: en ese caso, si el **permiso**
-está concedido, se permite continuar aunque no haya coordenadas exactas, evitando bloquear al usuario
-por una limitación del sistema operativo). Cuando la ubicación pasa de bloqueada a verificada, aparece
-un aviso breve que se desvanece solo — no se muestra si ya estaba habilitada de antes.
+#### Use case 1 — Two-factor login
+The holder enters email and password. If valid, a **one-time code is emailed** (OTP); only after
+confirming it is the session granted. Without a verified location, the login button stays disabled
+(see use case 10).
+
+#### Use case 2 — Browsing movements with filters
+The holder sees their balance, the total record count, and a movements table filterable by **tracking
+key** and **date range**. Each row offers **View detail** (a modal with sender/receiver, commission,
+VAT) and, from there, **View CEP** (the receipt with its digital stamp) — all without leaving the page.
+
+#### Use case 3 — Sending a SPEI transfer (to a third party or between own accounts)
+A form validates the CLABE (18 digits), bank, amount against available balance, and concept. Before the
+transfer executes, the **6-digit authorization code** is required. Once confirmed, the movement appears
+immediately in the list and the balance updates (query invalidation).
+
+#### Use case 4 — Receiving a SPEI transfer
+A screen with the account's banking details (CLABE, bank, holder name) ready to copy and share.
+
+#### Use case 5 — Account statements as PDF
+A list of available periods. **View** and **Download** both require the 6-digit code first (sensitive
+data). The document renders as a real bank statement (header, deposits/charges summary, full movement
+table for the period), and "Download" triggers the browser's native print dialog targeting "Save as
+PDF" — no PDF-generation library involved.
+
+#### Use case 6 — Profile: viewing and editing data
+The holder sees their information (email, phone, RFC, CURP, CLABE) and can **change email, phone, or
+NIP**, each change authorized with the 6-digit code (or the current NIP, when changing the NIP itself).
+
+#### Use case 7 — Multiple beneficiaries and the succession protocol
+The centerpiece of regulatory compliance: if the holder dies, their funds must pass to whoever they
+designated, without the account being left orphaned.
+
+- The holder can register **more than one beneficiary**, splitting a **percentage** that can never add
+  up to more than 100% across all of them.
+- Adding, editing, or revoking a beneficiary requires the 6-digit code.
+- The succession protocol is activated from an **external URL** (`/sucesion`), not from inside the
+  holder's session — modeling the real-world fact that whoever reports a death doesn't hold the
+  holder's credentials. Entering the holder's email, the system validates that active beneficiaries
+  exist and closes the holder's account.
+- Each active beneficiary then goes through their **own onboarding** (`/activar`): since they never had
+  a password, they verify their email (OTP), create their password and their NIP, and from then on can
+  log in with their own credentials to view/operate the inherited account.
+- Once succession is activated, the original holder **can no longer log in** (an explicit message, not
+  a generic error).
+
+#### Use case 8 — Canceling the account
+From the profile, the holder can request cancellation: they specify which CLABE to disperse their
+balance to, confirm with the 6-digit code, and the account is marked as canceled (login blocked from
+that point on).
+
+#### Use case 9 — Session timeout on inactivity
+For compliance (IFPE), the session closes automatically after **5 minutes with no activity** (mouse,
+keyboard, scroll, touch). Synchronized across tabs in the same browser: activity in one tab resets the
+timer in the others, and returning focus to a tab re-checks whether the timeout already elapsed while
+it was in the background.
+
+#### Use case 10 — Mandatory geolocation at login
+A regulatory requirement: login is not possible without a verified location. The UI clearly
+distinguishes **blocked** (the user denied the permission: they're shown how to re-enable it in the
+browser) from **unavailable** (the site permission is granted but the operating system isn't returning
+coordinates — common on macOS with Location Services turned off: in that case, if the **permission**
+is granted, the user is allowed through even without exact coordinates, so an OS-level limitation never
+blocks access). When location moves from blocked to verified, a brief banner appears and fades on its
+own — it never shows if location was already enabled beforehand.
 
 ---
 
-## 11. Diagramas de secuencia
+## 11. Sequence diagrams
 
-### 11.1 Login + verificación OTP
+### 11.1 Login + OTP verification
 
 ```mermaid
 sequenceDiagram
-    actor U as Usuario
+    actor U as User
     participant UI as LoginView
     participant Geo as useGeolocation
     participant API as lib/api/auth
     participant MSW as MSW (mock backend)
     participant S as authStore (Zustand)
 
-    U->>UI: Abre /login
+    U->>UI: Opens /login
     UI->>Geo: request()
     Geo-->>UI: status: granted | denied | unavailable
-    alt sin ubicación verificada
-        UI-->>U: Botón deshabilitado + guía para activarla
-    else ubicación verificada
-        U->>UI: Ingresa correo + contraseña, Continuar
+    alt location not verified
+        UI-->>U: Button disabled + guidance to enable it
+    else location verified
+        U->>UI: Enters email + password, Continue
         UI->>API: login(email, password)
         API->>MSW: POST /auth/login
-        alt credenciales inválidas
+        alt invalid credentials
             MSW-->>API: status ERROR (AUTH_001)
             API-->>UI: MedaApiError
-            UI-->>U: Muestra error
-        else beneficiario sin activar
+            UI-->>U: Shows error
+        else beneficiary not yet activated
             MSW-->>API: status ERROR (AUTH_BENEF_ACTIVATE)
             API-->>UI: MedaApiError
-            UI->>U: Redirige a /activar?email=…
-        else credenciales válidas
+            UI->>U: Redirects to /activar?email=…
+        else valid credentials
             MSW-->>API: status OK { otpTarget, role, holderName }
             API-->>UI: LoginResult
             UI->>S: startPreAuth(user, otpTarget)
-            UI->>U: Redirige a /verificar
+            UI->>U: Redirects to /verificar
         end
     end
 
-    U->>UI: Ingresa código OTP (6 dígitos)
+    U->>UI: Enters OTP code (6 digits)
     UI->>API: validateOtp(code)
     API->>MSW: POST /auth/otp/validate
-    alt código incorrecto
+    alt wrong code
         MSW-->>UI: status ERROR (AUTH_OTP_001)
-        UI-->>U: "Código incorrecto"
-    else código correcto
+        UI-->>U: "Incorrect code"
+    else correct code
         MSW-->>API: status OK { accessToken }
         API-->>UI: OtpValidateResult
         UI->>S: completeAuth(accessToken)
-        UI->>U: Redirige a /movimientos
+        UI->>U: Redirects to /movimientos
     end
 ```
 
-### 11.2 Enviar SPEI con autorización
+### 11.2 Sending a SPEI transfer with authorization
 
 ```mermaid
 sequenceDiagram
-    actor U as Titular
+    actor U as Holder
     participant F as SendSpeiView
     participant N as NipModal
     participant API as lib/api/account
     participant MSW as MSW (mock backend)
     participant Q as TanStack Query
 
-    U->>F: Llena CLABE, monto, concepto → Enviar
-    F->>F: Valida (Zod: CLABE, monto ≤ saldo, concepto)
-    F->>N: Abre modal de autorización
-    U->>N: Ingresa código de 6 dígitos
-    N->>API: sendSpei({ ...datos, nip })
+    U->>F: Fills CLABE, amount, concept → Send
+    F->>F: Validates (Zod: CLABE, amount ≤ balance, concept)
+    F->>N: Opens authorization modal
+    U->>N: Enters 6-digit code
+    N->>API: sendSpei({ ...payload, nip })
     API->>MSW: POST /transactions/spei
-    alt NIP incorrecto
+    alt wrong code
         MSW-->>N: status ERROR (TX_NIP_001)
-        N-->>U: "NIP incorrecto"
-    else autorizado
-        MSW->>MSW: crea movimiento, descuenta saldo (store persistente)
+        N-->>U: "Incorrect code"
+    else authorized
+        MSW->>MSW: creates movement, debits balance (persistent store)
         MSW-->>API: status OK { trackingKey, amount }
-        API-->>F: resultado
+        API-->>F: result
         F->>Q: invalidateQueries(["movements"], ["balance"])
-        F-->>U: Pantalla de éxito + clave de rastreo
-        Note over Q: /movimientos se refresca solo con el nuevo movimiento
+        F-->>U: Success screen + tracking key
+        Note over Q: /movimientos refreshes itself with the new movement
     end
 ```
 
-### 11.3 Protocolo de sucesión y activación del beneficiario
+### 11.3 Succession protocol and beneficiary activation
 
 ```mermaid
 sequenceDiagram
-    actor R as Reportante (URL externa)
-    actor B as Beneficiario
+    actor R as Reporter (external URL)
+    actor B as Beneficiary
     participant SU as /sucesion
     participant API as lib/api/profile
     participant MSW as MSW (mock backend)
     participant AC as /activar
 
-    R->>SU: Abre /sucesion, ingresa correo del titular
+    R->>SU: Opens /sucesion, enters the holder's email
     SU->>API: requestSuccession(email)
     API->>MSW: POST /account/succession/request
-    alt sin beneficiarios activos
+    alt no active beneficiaries
         MSW-->>SU: status ERROR (SUCC_002)
-    else con beneficiarios activos
-        MSW->>MSW: accountStatus = DECEASED (persistente)
+    else has active beneficiaries
+        MSW->>MSW: accountStatus = DECEASED (persisted)
         MSW-->>SU: status OK { holderName, beneficiaries[] }
-        SU-->>R: Lista de beneficiarios con enlace "Activar →"
+        SU-->>R: List of beneficiaries with an "Activate →" link
     end
 
-    R->>B: Comparte /activar?email=beneficiario@ejemplo.com
-    B->>AC: Abre el enlace
+    R->>B: Shares /activar?email=beneficiary@example.com
+    B->>AC: Opens the link
     AC->>API: beneficiaryStart(email)
     API->>MSW: POST /auth/beneficiary/start
-    MSW-->>AC: status OK { otpTarget } (envía OTP)
-    B->>AC: Confirma OTP
-    B->>AC: Crea contraseña + NIP
+    MSW-->>AC: status OK { otpTarget } (sends OTP)
+    B->>AC: Confirms OTP
+    B->>AC: Creates password + NIP
     AC->>API: beneficiaryActivate(email, password, nip)
     API->>MSW: POST /auth/beneficiary/activate
-    MSW->>MSW: beneficiario.activated = true; guarda credenciales
+    MSW->>MSW: beneficiary.activated = true; stores credentials
     MSW-->>AC: status OK { accessToken, role: BENEFICIARY }
-    AC-->>B: Sesión iniciada → /movimientos (banner "accediendo por sucesión")
+    AC-->>B: Session started → /movimientos ("accessing via succession" banner)
 
-    Note over MSW: A partir de aquí, el titular original recibe<br/>AUTH_DECEASED al intentar iniciar sesión.
+    Note over MSW: From here on, the original holder gets<br/>AUTH_DECEASED when trying to log in.
 ```
 
-### 11.4 Cierre de sesión por inactividad
+### 11.4 Session timeout on inactivity
 
 ```mermaid
 sequenceDiagram
-    participant U as Usuario
+    participant U as User
     participant ST as SessionTimeout
     participant LS as localStorage
     participant S as authStore
 
-    U->>ST: Interactúa (mousedown/keydown/scroll)
-    ST->>LS: Guarda timestamp de última actividad
-    ST->>ST: Reinicia temporizador (5 min)
+    U->>ST: Interacts (mousedown/keydown/scroll)
+    ST->>LS: Stores last-activity timestamp
+    ST->>ST: Resets the timer (5 min)
 
-    Note over U,ST: 5 minutos sin ninguna interacción…
+    Note over U,ST: 5 minutes with no interaction at all…
 
-    ST->>LS: Lee último timestamp
-    ST->>ST: ¿transcurrieron ≥ 5 min?
-    alt sí
+    ST->>LS: Reads last timestamp
+    ST->>ST: Has ≥ 5 min elapsed?
+    alt yes
         ST->>S: logout()
-        ST-->>U: Redirige a /login + aviso "Sesión cerrada por inactividad"
-    else no (otra pestaña resetó el timer)
-        ST->>ST: Reprograma con el tiempo restante
+        ST-->>U: Redirects to /login + "Session closed due to inactivity" notice
+    else no (another tab reset the timer)
+        ST->>ST: Reschedules with the remaining time
     end
 
-    Note over ST: Un evento "storage" desde otra pestaña también<br/>resetea este temporizador (sesión sincronizada).
+    Note over ST: A "storage" event from another tab also<br/>resets this timer (synchronized session).
 ```
 
 ---
 
-## 12. Credenciales y códigos de prueba
+## 12. Test credentials
 
-Para explorar la plataforma sin backend real, los valores viven en `src/mocks/data.ts`:
+To explore the platform without a real backend, values live in `src/mocks/data.ts`:
 
-| Dato | Valor |
+| Value | Data |
 |---|---|
-| Correo del titular | `saul.franco+01@meda.com.mx` |
-| Contraseña del titular | `Meda2026!` |
-| Código OTP (login, activación) | `123456` |
-| Código de autorización (NIP, 6 dígitos) | `123456` |
+| Holder email | `saul.franco+01@meda.com.mx` |
+| Holder password | `Meda2026!` |
+| OTP code (login, activation) | `123456` |
+| Authorization code (NIP, 6 digits) | `123456` |
 
-Flujo sugerido para probar todo el ciclo de sucesión:
+Suggested flow to test the full succession cycle:
 
-1. Inicia sesión como titular → Perfil → Beneficiario → agrega uno o más beneficiarios (código
-   `123456`, repartiendo el porcentaje).
-2. Abre `/sucesion` (en otra pestaña o tras cerrar sesión) → ingresa el correo del titular.
-3. Sigue el enlace "Activar →" del beneficiario → completa el onboarding en `/activar`.
-4. Verifica que el titular ya no puede iniciar sesión (mensaje de cuenta cerrada).
-5. Para reiniciar el estado y volver a empezar: abre **`/restablecer`**.
+1. Log in as the holder → Profile → Beneficiary → add one or more beneficiaries (code `123456`,
+   splitting the percentage).
+2. Open `/sucesion` (in another tab, or after logging out) → enter the holder's email.
+3. Follow a beneficiary's "Activate →" link → complete onboarding at `/activar`.
+4. Confirm the holder can no longer log in (account-closed message).
+5. To reset the state and start over: open **`/restablecer`**.
 
-## 13. Despliegue
+## 13. Sharing a review link (tunnel)
 
-### Opción A — Túnel para revisión (servidor, con MSW)
 ```bash
-pnpm dev:tunnel   # requiere `pnpm dev` corriendo en paralelo
-```
-Genera una URL pública temporal (`*.trycloudflare.com`) que sirve la app en modo servidor. Útil para
-que un equipo revise la plataforma sin desplegar nada.
-
-Para una URL vía túnel pero en **modo producción** (sin hot-reload, más representativo):
-```bash
-NEXT_PUBLIC_ENABLE_MSW=true pnpm build
-NEXT_PUBLIC_ENABLE_MSW=true pnpm start -p 3000
-# en otra terminal:
-npx cloudflared tunnel --url http://localhost:3000
+pnpm dev          # in one terminal
+pnpm dev:tunnel   # in another
 ```
 
-### Opción B — Sitio estático (Netlify Drop u otro hosting estático)
-Como toda la plataforma corre contra MSW (sin servidor real), se puede exportar como sitio 100%
-estático:
-```bash
-STATIC_EXPORT=true NEXT_PUBLIC_ENABLE_MSW=true pnpm build
-# genera ./out — arrastrar esa carpeta (o un .zip de su contenido) a Netlify Drop
-```
-`next.config.ts` activa `output: "export"` **solo** cuando `STATIC_EXPORT=true`, así el build normal
-(usado por `pnpm dev` / `pnpm start` / el túnel) no se ve afectado.
+`dev:tunnel` exposes `localhost:3000` through `cloudflared` and prints a temporary public URL
+(`*.trycloudflare.com`). This lets a reviewer open the platform without installing anything locally —
+it serves the same dev build running on your machine, with MSW answering every request.
 
-> Si el proveedor de hosting falla al subir muchos archivos sueltos, comprime `out/` en un `.zip` con
-> los archivos en la raíz (no dentro de una carpeta `out/`) y sube el `.zip` en su lugar.
+## 14. When the real backend arrives
 
-## 14. Cuando llegue el backend real
-
-1. Confirmar que las rutas reales coincidan con las listadas en la [sección 6](#6-mocking-con-msw-cómo-y-por-qué)
-   (o actualizar `lib/api/*.ts` si cambian).
-2. Configurar `NEXT_PUBLIC_API_URI_BASE` con la URL del servicio.
-3. Establecer `NEXT_PUBLIC_ENABLE_MSW=false` en el entorno de destino (o simplemente no definirla en
-   producción, que ya es el default seguro).
-4. No se requiere ningún otro cambio: `lib/api`, los hooks de TanStack Query y los componentes nunca
-   importaron nada de `src/mocks/` — dejan de usarse solos.
-5. Mover el `accessToken` de `sessionStorage` a una **cookie httpOnly** emitida por el backend (hoy es
-   un valor simulado sin uso real; el estándar de seguridad de Medá prioriza cookies httpOnly sobre
-   almacenamiento en el cliente para tokens sensibles).
+1. Confirm the real routes match the ones listed in [section 6](#6-mocking-with-msw-how-and-why) (or
+   update `lib/api/*.ts` if they differ).
+2. Set `NEXT_PUBLIC_API_URI_BASE` to the service URL.
+3. Set `NEXT_PUBLIC_ENABLE_MSW=false` in the target environment (or simply leave it unset in
+   production, which is already the safe default).
+4. No other change is required: `lib/api`, the TanStack Query hooks, and the components never imported
+   anything from `src/mocks/` — they simply stop being used.
+5. Move the `accessToken` from `sessionStorage` to an **httpOnly cookie** issued by the backend (today
+   it's a simulated value with no real use; Medá's security standard favors httpOnly cookies over
+   client-side storage for sensitive tokens).

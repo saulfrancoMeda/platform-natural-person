@@ -7,13 +7,13 @@ import {
   ArrowUpFromLine,
   FileText,
   HeartHandshake,
-  Repeat,
 } from "lucide-react";
 import { AppShell } from "@/components/ui/app-shell";
 import type { NavGroup } from "@/components/ui/sidebar";
 import { MedaLogo } from "@/features/auth/meda-logo";
 import { NotificationsMenu } from "@/features/shell/notifications-menu";
 import { UserMenu } from "@/features/shell/user-menu";
+import { SessionTimeout } from "@/features/shell/session-timeout";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { logout as apiLogout } from "@/lib/api/auth";
 
@@ -21,9 +21,8 @@ const GROUPS: NavGroup[] = [
   {
     title: "Transacciones",
     items: [
-      { label: "Enviar SPEI", href: "/transacciones/enviar-spei", icon: <ArrowUpFromLine className="h-4 w-4" /> },
+      { label: "Enviar SPEI y/o a otras cuentas Medá", href: "/transacciones/enviar-spei", icon: <ArrowUpFromLine className="h-4 w-4" /> },
       { label: "Recibir SPEI", href: "/transacciones/recibir-spei", icon: <ArrowDownToLine className="h-4 w-4" /> },
-      { label: "Entre cuentas", href: "/transacciones/entre-cuentas", icon: <Repeat className="h-4 w-4" /> },
     ],
   },
   {
@@ -31,7 +30,6 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Movimientos", href: "/movimientos", icon: <ArrowLeftRight className="h-4 w-4" /> },
       { label: "Estados de cuenta", href: "/estados-de-cuenta", icon: <FileText className="h-4 w-4" /> },
-      { label: "Beneficiario", href: "/beneficiario", icon: <HeartHandshake className="h-4 w-4" /> },
     ],
   },
 ];
@@ -75,6 +73,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       }
     >
+      <SessionTimeout />
       {isBeneficiary && (
         <div className="mb-5 flex items-center gap-2 rounded-meda border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-fg">
           <HeartHandshake className="h-4 w-4 shrink-0 text-brand-dark" />

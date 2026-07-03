@@ -16,7 +16,7 @@ interface Props {
   onValid: (nip: string) => void;
 }
 
-/** Solicita y valida el NIP (4 dígitos) contra la API antes de una acción sensible. */
+/** Solicita y valida el NIP (6 dígitos) contra la API antes de una acción sensible. */
 export function NipDialog({ open, title = "Autoriza con tu NIP", description, onClose, onValid }: Props) {
   const [nip, setNip] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -30,7 +30,7 @@ export function NipDialog({ open, title = "Autoriza con tu NIP", description, on
   }, [open]);
 
   const confirm = async () => {
-    if (nip.length !== 4) return;
+    if (nip.length !== 6) return;
     setValidating(true);
     setError(null);
     try {
@@ -50,7 +50,7 @@ export function NipDialog({ open, title = "Autoriza con tu NIP", description, on
       <div className="flex flex-col items-center gap-5 py-2">
         <p className="text-center text-sm text-fg-secondary">{description}</p>
 
-        <InputOTP length={4} value={nip} onChange={setNip} error={!!error} />
+        <InputOTP length={6} value={nip} onChange={setNip} error={!!error} />
         {error && <p className="text-sm text-error">{error}</p>}
 
         <div className="flex w-full gap-3">
@@ -61,7 +61,7 @@ export function NipDialog({ open, title = "Autoriza con tu NIP", description, on
             variant="primary"
             className="flex-1"
             loading={validating}
-            disabled={nip.length !== 4}
+            disabled={nip.length !== 6}
             onClick={confirm}
           >
             Confirmar

@@ -39,6 +39,9 @@ export const authHandlers = [
           "Esta cuenta fue cerrada por protocolo de sucesión y ya no está disponible.",
         );
       }
+      if (state.accountStatus === "CANCELLED") {
+        return fail("AUTH_CANCELLED", "Esta cuenta fue cancelada y ya no está disponible.");
+      }
       return ok({
         otpRequired: true,
         otpChannel: "EMAIL",
@@ -50,16 +53,22 @@ export const authHandlers = [
     }
 
     // Beneficiario (solo tras activarse el protocolo de sucesión)
-    const b = state.beneficiary;
-    if (b && b.status === "ACTIVE" && email === b.email) {
-      if (password !== DEMO_USER.password) {
-        return fail("AUTH_001", "Credenciales inválidas. Por favor, inténtelo de nuevo.");
-      }
+    const b = state.beneficiaries.find((x) => x.status === "ACTIVE" && x.email === email);
+    if (b) {
       if (state.accountStatus !== "DECEASED") {
         return fail(
           "AUTH_BENEF_LOCKED",
           "Aún no tienes acceso a esta cuenta. El acceso por sucesión se habilita cuando se activa el protocolo.",
         );
+      }
+      if (!b.activated) {
+        return fail(
+          "AUTH_BENEF_ACTIVATE",
+          "Tu acceso como beneficiario aún no está activado. Actívalo para continuar.",
+        );
+      }
+      if (password !== state.beneficiaryCreds[b.email]) {
+        return fail("AUTH_001", "Credenciales inválidas. Por favor, inténtelo de nuevo.");
       }
       return ok({
         otpRequired: true,
@@ -72,6 +81,63 @@ export const authHandlers = [
     }
 
     return fail("AUTH_001", "Credenciales inválidas. Por favor, inténtelo de nuevo.");
+  }),
+
+  // Onboarding del beneficiario — paso 1: valida elegibilidad y envía OTP
+  http.post(`${BASE}/auth/beneficiary/start`, async ({ request }) => {
+    await delay(500);
+    const { body } = (await request.json()) as { body: { email?: string } };
+    const s = getState();
+    const b = s.beneficiaries.find((x) => x.status === "ACTIVE" && x.email === body?.email);
+    if (!b) {
+      return fail("BENEF_START_001", "No encontramos una invitación de sucesión para este correo.");
+    }
+    if (s.accountStatus !== "DECEASED") {
+      return fail("BENEF_START_002", "El acceso por sucesión aún no está habilitado.");
+    }
+    if (b.activated) {
+      return fail("BENEF_START_003", "Tu acceso ya está activado. Inicia sesión con tu contraseña.");
+    }
+    return ok({
+      otpChannel: "EMAIL",
+      otpTarget: maskEmail(b.email),
+      name: b.name,
+      holderName: s.profile.name,
+    });
+  }),
+
+  // Onboarding del beneficiario — paso final: define contraseña y NIP → sesión
+  http.post(`${BASE}/auth/beneficiary/activate`, async ({ request }) => {
+    await delay(600);
+    const { body } = (await request.json()) as {
+      body: { email?: string; password?: string; nip?: string };
+    };
+    const s = getState();
+    const b = s.beneficiaries.find((x) => x.status === "ACTIVE" && x.email === body?.email);
+    if (!b || s.accountStatus !== "DECEASED") {
+      return fail("BENEF_ACT_001", "No fue posible activar el acceso.");
+    }
+    if (!body?.password || body.password.length < 8) {
+      return fail("BENEF_ACT_002", "La contraseña debe tener al menos 8 caracteres.");
+    }
+    if (!body?.nip || !/^\d{6}$/.test(body.nip)) {
+      return fail("BENEF_ACT_003", "El NIP debe tener 6 dígitos.");
+    }
+    const beneficiaries = s.beneficiaries.map((x) =>
+      x.id === b.id ? { ...x, activated: true } : x,
+    );
+    setState({
+      beneficiaries,
+      beneficiaryCreds: { ...s.beneficiaryCreds, [b.email]: body.password },
+      nip: body.nip,
+    });
+    return ok({
+      accessToken: "meda-access-token",
+      refreshToken: "meda-refresh-token",
+      role: "BENEFICIARY",
+      holderName: s.profile.name,
+      user: { name: b.name, email: b.email },
+    });
   }),
 
   // Reenvío de OTP
@@ -108,8 +174,8 @@ export const authHandlers = [
     if (body?.currentNip !== getState().nip) {
       return fail("NIP_002", "El NIP actual es incorrecto.");
     }
-    if (!body?.newNip || !/^\d{4}$/.test(body.newNip)) {
-      return fail("NIP_003", "El nuevo NIP debe tener 4 dígitos.");
+    if (!body?.newNip || !/^\d{6}$/.test(body.newNip)) {
+      return fail("NIP_003", "El nuevo NIP debe tener 6 dígitos.");
     }
     setState({ nip: body.newNip });
     return ok({ changed: true });

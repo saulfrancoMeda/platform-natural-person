@@ -184,7 +184,7 @@ export const DEMO_USER = {
   name: "Juan Pérez López",
 };
 export const DEMO_OTP = "123456";
-export const DEMO_NIP = "1234";
+export const DEMO_NIP = "123456";
 
 /** Beneficiario de demostración (la persona que hereda la cuenta). */
 export const DEMO_BENEFICIARY = {

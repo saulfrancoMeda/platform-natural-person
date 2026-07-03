@@ -15,7 +15,7 @@ interface Props {
   onConfirm: (nip: string) => void;
 }
 
-/** Autorización con NIP (4 dígitos) antes de ejecutar la transferencia. */
+/** Autorización con NIP (6 dígitos) antes de ejecutar la transferencia. */
 export function NipModal({ open, amount, receiverName, submitting, onClose, onConfirm }: Props) {
   const [nip, setNip] = React.useState("");
 
@@ -33,11 +33,10 @@ export function NipModal({ open, amount, receiverName, submitting, onClose, onCo
       <div className="flex flex-col items-center gap-5 py-2">
         <p className="text-center text-sm text-fg-secondary">
           Vas a enviar <span className="font-semibold text-fg">{formatMXN(amount)}</span> a{" "}
-          <span className="font-medium text-fg">{receiverName}</span>. Ingresa tu NIP de 4 dígitos
-          para confirmar.
+          <span className="font-medium text-fg">{receiverName}</span>. Ingresa el código que enviamos a tu correo.
         </p>
 
-        <InputOTP length={4} value={nip} onChange={setNip} />
+        <InputOTP length={6} value={nip} onChange={setNip} />
 
         <div className="flex w-full gap-3">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>
@@ -47,7 +46,7 @@ export function NipModal({ open, amount, receiverName, submitting, onClose, onCo
             variant="primary"
             className="flex-1"
             loading={submitting}
-            disabled={nip.length !== 4}
+            disabled={nip.length !== 6}
             onClick={() => onConfirm(nip)}
           >
             Confirmar

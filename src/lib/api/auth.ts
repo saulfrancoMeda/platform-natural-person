@@ -31,6 +31,25 @@ export const validateNip = (nip: string) =>
 export const changeNip = (currentNip: string, newNip: string) =>
   post<{ changed: boolean }>("/auth/nip/change", { currentNip, newNip });
 
+export interface BeneficiaryStartResult {
+  otpChannel: string;
+  otpTarget: string;
+  name: string;
+  holderName: string;
+}
+export const beneficiaryStart = (email: string) =>
+  post<BeneficiaryStartResult>("/auth/beneficiary/start", { email });
+
+export interface BeneficiaryActivateResult {
+  accessToken: string;
+  refreshToken: string;
+  role: SessionRole;
+  holderName: string;
+  user: { name: string; email: string };
+}
+export const beneficiaryActivate = (email: string, password: string, nip: string) =>
+  post<BeneficiaryActivateResult>("/auth/beneficiary/activate", { email, password, nip });
+
 export const resetDemo = () => post<{ reset: boolean }>("/demo/reset", {});
 
 export const logout = () => post<{ loggedOut: boolean }>("/auth/logout", {});

@@ -4,15 +4,15 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, MapPin, MapPinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { MedaLogo } from "./meda-logo";
 import { cn } from "@/lib/cn";
-import { login, resetDemo } from "@/lib/api/auth";
+import { login } from "@/lib/api/auth";
 import { MedaApiError } from "@/lib/api/client";
-import { useToast } from "@/components/ui/toast";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { useGeolocation, type GeoState } from "@/lib/hooks/use-geolocation";
 
 const schema = z.object({
   email: z.string().min(1, "Ingresa tu correo").email("Correo no válido"),
@@ -22,19 +22,28 @@ type LoginValues = z.infer<typeof schema>;
 
 export function LoginView() {
   const router = useRouter();
-  const { show } = useToast();
   const startPreAuth = useAuthStore((s) => s.startPreAuth);
+  const geo = useGeolocation();
+  const geoReady = geo.status === "granted";
   const [showPw, setShowPw] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
+  const [showVerified, setShowVerified] = React.useState(false);
+  const geoHadIssue = React.useRef(false);
 
-  const handleReset = async () => {
-    try {
-      await resetDemo();
-      show("success", "Demo reiniciada. La cuenta del titular vuelve a estar activa.");
-    } catch {
-      show("error", "No se pudo reiniciar la demo.");
+  // Muestra "Ubicación verificada" SOLO cuando hay un cambio (se habilitó tras estar
+  // bloqueada/no disponible) y luego desaparece en segundos. Si ya estaba habilitada, no sale.
+  React.useEffect(() => {
+    if (geo.status === "denied" || geo.status === "unavailable") {
+      geoHadIssue.current = true;
+      return;
     }
-  };
+    if (geo.status === "granted" && geoHadIssue.current) {
+      geoHadIssue.current = false;
+      setShowVerified(true);
+      const t = setTimeout(() => setShowVerified(false), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [geo.status]);
 
   const {
     register,
@@ -43,6 +52,7 @@ export function LoginView() {
   } = useForm<LoginValues>({ resolver: zodResolver(schema), mode: "onChange" });
 
   const onSubmit = async (values: LoginValues) => {
+    if (!geoReady) return;
     setServerError(null);
     try {
       const res = await login(values.email, values.password);
@@ -52,6 +62,11 @@ export function LoginView() {
       );
       router.push("/verificar");
     } catch (err) {
+      // Beneficiario sin activar → llévalo al proceso de activación.
+      if (err instanceof MedaApiError && err.code === "AUTH_BENEF_ACTIVATE") {
+        router.push(`/activar?email=${encodeURIComponent(values.email)}`);
+        return;
+      }
       setServerError(
         err instanceof MedaApiError && err.message
           ? err.message
@@ -68,6 +83,13 @@ export function LoginView() {
 
   return (
     <main className="grid min-h-screen bg-bg lg:grid-cols-2">
+      {/* Aviso transitorio de ubicación verificada (parte superior) */}
+      {showVerified && (
+        <div className="meda-pop fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-meda border border-success/30 bg-success/10 px-4 py-2.5 text-sm font-medium text-success-dark shadow-lg">
+          <MapPin className="h-4 w-4" /> Ubicación verificada
+        </div>
+      )}
+
       {/* Columna izquierda: formulario */}
       <div className="relative flex flex-col px-6 py-8 sm:px-12">
         <div className="flex items-center justify-between">
@@ -76,6 +98,13 @@ export function LoginView() {
         </div>
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center meda-fade-in">
+          {/* Requisito de ubicación (arriba del nombre) */}
+          {!geoReady && (
+            <div className="mb-6">
+              <GeoPrompt geo={geo} />
+            </div>
+          )}
+
           <h1 className="text-center text-3xl font-semibold text-fg">
             ¡Qué gusto tenerte aquí!
           </h1>
@@ -141,20 +170,16 @@ export function LoginView() {
               ¿Olvidaste tu contraseña?
             </a>
 
-            <Button type="submit" variant="primary" loading={isSubmitting} className="mt-2 h-12 w-full">
-              Continuar
+            <Button
+              type="submit"
+              variant="primary"
+              loading={isSubmitting}
+              disabled={!geoReady}
+              className="mt-2 h-12 w-full"
+            >
+              {geoReady ? "Continuar" : "Activa tu ubicación para continuar"}
             </Button>
           </form>
-        </div>
-
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs text-fg-tertiary underline hover:text-fg-secondary"
-          >
-            Reiniciar demo de sucesión
-          </button>
         </div>
       </div>
 
@@ -182,5 +207,42 @@ export function LoginView() {
         </div>
       </aside>
     </main>
+  );
+}
+
+/** Requisito de geolocalización para acceder (regulatorio). Solo estados sin conceder. */
+function GeoPrompt({ geo }: { geo: GeoState }) {
+  if (geo.status === "granted") return null;
+
+  if (geo.status === "checking") {
+    return (
+      <div className="flex items-center gap-2 rounded-control border border-border-default bg-muted px-3 py-2 text-sm text-fg-secondary">
+        <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
+        Verificando tu ubicación…
+      </div>
+    );
+  }
+
+  const denied = geo.status === "denied";
+  const unavailable = geo.status === "unavailable";
+  return (
+    <div className="rounded-control border border-warning/40 bg-warning/10 p-3">
+      <div className="flex items-start gap-2.5">
+        <MapPinOff className="mt-0.5 h-5 w-5 shrink-0 text-warning-dark" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-fg">Necesitamos tu ubicación</p>
+          <p className="mt-0.5 text-xs text-fg-secondary">
+            {denied
+              ? "Bloqueaste el permiso de ubicación. Actívalo en el navegador (icono junto a la URL) y reintenta."
+              : unavailable
+                ? "No pudimos obtener tu ubicación. Activa los Servicios de ubicación del sistema (en Mac: Ajustes → Privacidad y seguridad → Localización, y habilita tu navegador) y reintenta."
+                : "Por seguridad y por regulación, verificamos tu ubicación al iniciar sesión."}
+          </p>
+        </div>
+      </div>
+      <Button type="button" variant="outline" onClick={geo.request} className="mt-3 h-10 w-full">
+        {denied || unavailable ? "Reintentar" : "Permitir ubicación"}
+      </Button>
+    </div>
   );
 }

@@ -6,7 +6,7 @@
  */
 import { DEFAULT_PROFILE, DEMO_NIP } from "./data";
 
-export type AccountStatus = "ACTIVE" | "DECEASED";
+export type AccountStatus = "ACTIVE" | "DECEASED" | "CANCELLED";
 export type BeneficiaryStatus = "ACTIVE" | "REVOKED";
 
 export interface Beneficiary {
@@ -17,6 +17,8 @@ export interface Beneficiary {
   percentage: number;
   status: BeneficiaryStatus;
   registeredAt: string;
+  /** El beneficiario nuevo no tiene contraseña: debe activar su acceso primero. */
+  activated: boolean;
 }
 
 export interface MockProfile {
@@ -31,7 +33,10 @@ export interface MockProfile {
 export interface MockState {
   accountStatus: AccountStatus;
   deceasedAt: string | null;
-  beneficiary: Beneficiary | null;
+  /** Puede haber más de un beneficiario. */
+  beneficiaries: Beneficiary[];
+  /** Contraseñas que cada beneficiario define al activar su acceso (correo → contraseña). */
+  beneficiaryCreds: Record<string, string>;
   profile: MockProfile;
   nip: string;
 }
@@ -42,7 +47,8 @@ function initial(): MockState {
   return {
     accountStatus: "ACTIVE",
     deceasedAt: null,
-    beneficiary: null,
+    beneficiaries: [],
+    beneficiaryCreds: {},
     profile: { ...DEFAULT_PROFILE },
     nip: DEMO_NIP,
   };

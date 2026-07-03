@@ -1,11 +1,5 @@
-import { SendSpeiView } from "@/features/transactions/send-spei-view";
+import { TransferAccountsView } from "@/features/transactions/transfer-accounts-view";
 
 export default function EntreCuentasPage() {
-  return (
-    <SendSpeiView
-      ownAccounts
-      title="Transacción entre cuentas"
-      description="Mueve dinero entre tus propias cuentas Medá."
-    />
-  );
+  return <TransferAccountsView />;
 }

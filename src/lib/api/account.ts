@@ -54,12 +54,13 @@ export const getAccountStatements = () =>
 export interface SpeiPayload {
   amount: number;
   receiverClabe: string;
-  receiverName: string;
-  bank: string;
+  /** Requeridos para SPEI externo; opcionales para transferencia entre cuentas propias. */
+  receiverName?: string;
+  bank?: string;
   concept: string;
   reference?: string;
   rfcCurp?: string;
-  /** NIP de 4 dígitos para autorizar la transferencia. */
+  /** NIP de 6 dígitos para autorizar la transferencia. */
   nip: string;
 }
 export const sendSpei = (payload: SpeiPayload) =>

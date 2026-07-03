@@ -100,8 +100,8 @@ export function StatementsView() {
         open={!!pending}
         description={
           pending?.mode === "download"
-            ? "Ingresa tu NIP de 4 dígitos para descargar tu estado de cuenta."
-            : "Ingresa tu NIP de 4 dígitos para ver tu estado de cuenta."
+            ? "Ingresa el código que enviamos a tu correo para descargar tu estado de cuenta."
+            : "Ingresa el código que enviamos a tu correo para ver tu estado de cuenta."
         }
         onClose={() => setPending(null)}
         onValid={runAfterNip}

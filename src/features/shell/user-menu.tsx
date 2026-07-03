@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function UserMenu({ name, email, onLogout }: Props) {
+  const router = useRouter();
   return (
     <DropdownMenu
       align="right"
@@ -30,7 +32,7 @@ export function UserMenu({ name, email, onLogout }: Props) {
         </div>
       </div>
       <div className="py-1">
-        <DropdownItem>
+        <DropdownItem onClick={() => router.push("/perfil")}>
           <User className="mr-2 h-4 w-4 text-fg-tertiary" /> Mi perfil
         </DropdownItem>
         <DropdownItem danger onClick={onLogout}>

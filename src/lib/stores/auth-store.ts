@@ -1,29 +1,33 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+export type SessionRole = "HOLDER" | "BENEFICIARY";
+
 export interface SessionUser {
   name: string;
   email: string;
+  role: SessionRole;
+  /** Nombre del titular cuando el que accede es el beneficiario (sucesión). */
+  holderName: string | null;
 }
 
 interface AuthState {
-  /** Credenciales validadas, esperando OTP. */
-  preAuth: SessionUser | null;
+  /** Identidad validada, esperando OTP. */
+  preAuth: (SessionUser & { otpTarget: string }) | null;
   /** Sesión completa (OTP validado). */
   user: SessionUser | null;
   accessToken: string | null;
-  /** true cuando login + OTP terminaron. */
   isAuthenticated: boolean;
   otpTarget: string | null;
 
   startPreAuth: (user: SessionUser, otpTarget: string) => void;
-  completeAuth: (user: SessionUser, accessToken: string) => void;
+  completeAuth: (accessToken: string) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       preAuth: null,
       user: null,
       accessToken: null,
@@ -31,10 +35,20 @@ export const useAuthStore = create<AuthState>()(
       otpTarget: null,
 
       startPreAuth: (user, otpTarget) =>
-        set({ preAuth: user, otpTarget, isAuthenticated: false, user: null, accessToken: null }),
+        set({
+          preAuth: { ...user, otpTarget },
+          otpTarget,
+          isAuthenticated: false,
+          user: null,
+          accessToken: null,
+        }),
 
-      completeAuth: (user, accessToken) =>
-        set({ user, accessToken, isAuthenticated: true, preAuth: null }),
+      completeAuth: (accessToken) => {
+        const p = get().preAuth;
+        if (!p) return;
+        const { otpTarget: _otp, ...user } = p;
+        set({ user, accessToken, isAuthenticated: true, preAuth: null });
+      },
 
       logout: () =>
         set({

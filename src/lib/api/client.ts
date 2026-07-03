@@ -42,3 +42,22 @@ export async function get<T>(path: string, init?: RequestInit): Promise<T> {
   if (json.status === "ERROR") throw new MedaApiError(json.errorCode, json.errorMessage);
   return json.data;
 }
+
+/** PATCH to a MEDA service (partial update). Same envelope as POST. */
+export async function patch<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
+  return post<T>(path, body, { method: "PATCH", ...init });
+}
+
+/** DELETE on a MEDA service. */
+export async function del<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    body: JSON.stringify({ traceId: genTraceId(), body: {} }),
+    ...init,
+  });
+  if (res.status >= 500) throw new MedaApiError("SYSTEM_ERROR", "Service unavailable");
+  const json = (await res.json()) as APIResponse<T>;
+  if (json.status === "ERROR") throw new MedaApiError(json.errorCode, json.errorMessage);
+  return json.data;
+}

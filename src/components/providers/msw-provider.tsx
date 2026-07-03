@@ -13,16 +13,21 @@ export function MSWProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!isMSWEnabled()) return;
     let active = true;
-    import("@/mocks/browser").then(({ worker }) =>
-      worker
-        .start({ onUnhandledRequest: "bypass" })
-        .then(() => active && setReady(true)),
-    );
+    import("@/mocks/browser")
+      .then(({ worker }) => worker.start({ onUnhandledRequest: "bypass" }))
+      // Renderiza aunque el worker falle: mejor una app degradada que una pantalla en blanco.
+      .finally(() => active && setReady(true));
     return () => {
       active = false;
     };
   }, []);
 
-  if (!ready) return null;
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-default border-t-brand" />
+      </div>
+    );
+  }
   return <>{children}</>;
 }

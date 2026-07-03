@@ -9,7 +9,7 @@ import { formatMXN } from "@/lib/utils/format";
 import { useAccountStatements, useBalance, useMovements } from "@/lib/hooks/use-account";
 import { StatusBadge, TypeLabel } from "@/features/movements/movement-status-badge";
 
-export function StatementDocument({ id }: { id: string }) {
+export function StatementDocument({ id, autoPrint }: { id: string; autoPrint?: boolean }) {
   const { data: statements } = useAccountStatements();
   const { data: balance } = useBalance();
   const statement = statements?.find((s) => s.id === id);
@@ -19,6 +19,16 @@ export function StatementDocument({ id }: { id: string }) {
     endDate: statement?.endDate,
   });
   const movements = data?.items ?? [];
+
+  // Descarga: cuando el documento y sus datos están listos, abre el diálogo de impresión (Guardar como PDF).
+  const printed = React.useRef(false);
+  React.useEffect(() => {
+    if (autoPrint && !printed.current && statement && !isLoading) {
+      printed.current = true;
+      const t = setTimeout(() => window.print(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [autoPrint, statement, isLoading]);
 
   const totals = React.useMemo(() => {
     let abonos = 0;

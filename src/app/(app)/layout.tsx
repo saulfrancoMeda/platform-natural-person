@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   FileText,
+  HeartHandshake,
   Repeat,
 } from "lucide-react";
 import { AppShell } from "@/components/ui/app-shell";
@@ -30,6 +31,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Movimientos", href: "/movimientos", icon: <ArrowLeftRight className="h-4 w-4" /> },
       { label: "Estados de cuenta", href: "/estados-de-cuenta", icon: <FileText className="h-4 w-4" /> },
+      { label: "Beneficiario", href: "/beneficiario", icon: <HeartHandshake className="h-4 w-4" /> },
     ],
   },
 ];
@@ -59,29 +61,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!hydrated || !isAuthenticated) return null;
 
-  const initials = (user?.name ?? "?")
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+  const isBeneficiary = user?.role === "BENEFICIARY";
 
   return (
     <AppShell
       groups={GROUPS}
       activeHref={pathname}
       sidebarHeader={<MedaLogo className="h-8" />}
-      sidebarFooter={
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/20 text-xs font-semibold text-brand-dark">
-            {initials}
-          </span>
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-sm font-medium text-fg">{user?.name}</p>
-            <p className="truncate text-xs text-fg-tertiary">{user?.email}</p>
-          </div>
-        </div>
-      }
       topRight={
         <div className="flex items-center gap-2">
           <NotificationsMenu />
@@ -89,6 +75,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       }
     >
+      {isBeneficiary && (
+        <div className="mb-5 flex items-center gap-2 rounded-meda border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-fg">
+          <HeartHandshake className="h-4 w-4 shrink-0 text-brand-dark" />
+          Estás accediendo por sucesión como beneficiario de{" "}
+          <span className="font-semibold">{user?.holderName}</span>.
+        </div>
+      )}
       {children}
     </AppShell>
   );

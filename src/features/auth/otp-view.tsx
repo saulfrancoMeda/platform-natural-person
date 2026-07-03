@@ -45,7 +45,7 @@ export function OtpView() {
     setError(false);
     try {
       const res = await validateOtp(code);
-      completeAuth(res.user, res.accessToken);
+      completeAuth(res.accessToken);
       show("success", "Código confirmado. Bienvenido a Medá.");
       router.replace("/movimientos");
     } catch (err) {

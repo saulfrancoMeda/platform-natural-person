@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { MedaLogo } from "./meda-logo";
 import { cn } from "@/lib/cn";
-import { login } from "@/lib/api/auth";
+import { login, resetDemo } from "@/lib/api/auth";
 import { MedaApiError } from "@/lib/api/client";
+import { useToast } from "@/components/ui/toast";
 import { useAuthStore } from "@/lib/stores/auth-store";
 
 const schema = z.object({
@@ -21,9 +22,19 @@ type LoginValues = z.infer<typeof schema>;
 
 export function LoginView() {
   const router = useRouter();
+  const { show } = useToast();
   const startPreAuth = useAuthStore((s) => s.startPreAuth);
   const [showPw, setShowPw] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
+
+  const handleReset = async () => {
+    try {
+      await resetDemo();
+      show("success", "Demo reiniciada. La cuenta del titular vuelve a estar activa.");
+    } catch {
+      show("error", "No se pudo reiniciar la demo.");
+    }
+  };
 
   const {
     register,
@@ -35,7 +46,10 @@ export function LoginView() {
     setServerError(null);
     try {
       const res = await login(values.email, values.password);
-      startPreAuth(res.user, res.otpTarget);
+      startPreAuth(
+        { name: res.user.name, email: res.user.email, role: res.role, holderName: res.holderName },
+        res.otpTarget,
+      );
       router.push("/verificar");
     } catch (err) {
       setServerError(
@@ -131,6 +145,16 @@ export function LoginView() {
               Continuar
             </Button>
           </form>
+        </div>
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="text-xs text-fg-tertiary underline hover:text-fg-secondary"
+          >
+            Reiniciar demo de sucesión
+          </button>
         </div>
       </div>
 

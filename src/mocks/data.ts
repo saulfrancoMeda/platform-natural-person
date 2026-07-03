@@ -186,6 +186,23 @@ export const DEMO_USER = {
 export const DEMO_OTP = "123456";
 export const DEMO_NIP = "1234";
 
+/** Beneficiario de demostración (la persona que hereda la cuenta). */
+export const DEMO_BENEFICIARY = {
+  name: "María García Ruiz",
+  email: "saul.franco+02@meda.com.mx",
+  relationship: "Cónyuge",
+};
+
+/** Perfil inicial del titular. */
+export const DEFAULT_PROFILE = {
+  name: DEMO_USER.name,
+  email: DEMO_USER.email,
+  phone: "5544332211",
+  curp: "PELJ900101HDFRRN08",
+  rfc: "PELJ900101AB1",
+  clabe: ACCOUNT_BALANCE.clabe,
+};
+
 /** Crea un movimiento a partir de un SPEI enviado y actualiza el saldo (mock en memoria). */
 export function addSpeiMovement(input: {
   amount: number;

@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -9,7 +10,8 @@ import { formatMXN } from "@/lib/utils/format";
 import { useAccountStatements, useBalance, useMovements } from "@/lib/hooks/use-account";
 import { StatusBadge, TypeLabel } from "@/features/movements/movement-status-badge";
 
-export function StatementDocument({ id, autoPrint }: { id: string; autoPrint?: boolean }) {
+export function StatementDocument({ id }: { id: string }) {
+  const autoPrint = useSearchParams().get("print") === "1";
   const { data: statements } = useAccountStatements();
   const { data: balance } = useBalance();
   const statement = statements?.find((s) => s.id === id);
